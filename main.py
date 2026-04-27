@@ -3,13 +3,17 @@ from discord import app_commands
 import os
 from dotenv import load_dotenv
 
+# Charger le .env (pour local)
 load_dotenv()
 
+# Récupérer le token (Railway + local)
 TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = 1496551245186338886  # ID de ton serveur
+
+# ⚠️ Remplace par l'ID de TON serveur
+GUILD_ID = 1496551245186338886
 
 if TOKEN is None:
-    raise ValueError("Token introuvable. Vérifie ton fichier .env")
+    raise ValueError("❌ Token introuvable. Vérifie Railway ou ton .env")
 
 class MyClient(discord.Client):
     def __init__(self):
@@ -26,8 +30,9 @@ client = MyClient()
 
 @client.event
 async def on_ready():
-    print(f"✅ Bot connecté en tant que {client.user}")
+    print(f"✅ Connecté en tant que {client.user}")
 
+# ✅ COMMANDE /message
 @client.tree.command(
     name="message",
     description="Fait parler le bot",
@@ -35,8 +40,13 @@ async def on_ready():
 )
 @app_commands.describe(texte="Le message à envoyer")
 async def message(interaction: discord.Interaction, texte: str):
+    
+    # IMPORTANT → évite "application ne répond pas"
     await interaction.response.defer(ephemeral=True)
+
     await interaction.channel.send(texte)
+
     await interaction.followup.send("✅ Message envoyé", ephemeral=True)
 
+# Lancer le bot
 client.run(TOKEN)
