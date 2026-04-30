@@ -300,9 +300,19 @@ async def on_message(message: discord.Message):
     description="Affiche le classement des invitations",
     guild=discord.Object(id=GUILD_ID)
 )
-@app_commands.checks.has_role(FONDATEUR_ROLE_ID)
 async def classement(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=False)
+    await interaction.response.defer(thinking=True)
+
+    if not isinstance(interaction.user, discord.Member):
+        await interaction.followup.send("❌ Erreur utilisateur.", ephemeral=True)
+        return
+
+    if not has_fondateur_role(interaction.user):
+        await interaction.followup.send(
+            "❌ Seuls les Fondateurs peuvent utiliser cette commande.",
+            ephemeral=True
+        )
+        return
 
     data = load_data()
     invites_data = data.get("invites", {})
@@ -329,10 +339,7 @@ async def classement(interaction: discord.Interaction):
         return
 
     if not invites_data:
-        await interaction.followup.send(
-            "❌ Aucun classement disponible.",
-            ephemeral=False
-        )
+        await interaction.followup.send("❌ Aucun classement disponible.")
         return
 
     sorted_invites = sorted(
@@ -358,7 +365,7 @@ async def classement(interaction: discord.Interaction):
     )
     embed.set_footer(text="Nebulix — Invitations")
 
-    await interaction.followup.send(embed=embed, ephemeral=False)
+    await interaction.followup.send(embed=embed)
 
 
 @client.tree.command(
@@ -366,9 +373,22 @@ async def classement(interaction: discord.Interaction):
     description="Fait parler le bot avec un embed",
     guild=discord.Object(id=GUILD_ID)
 )
-@app_commands.describe(texte="Le message à envoyer dans l'embed")
-async def message(interaction: discord.Interaction, texte: str):
+@app_commands.describe(
+    texte="Le message à envoyer dans l'embed",
+    image="Image principale à ajouter",
+    miniature="Petite image en haut à droite"
+)
+async def message(
+    interaction: discord.Interaction,
+    texte: str,
+    image: discord.Attachment = None,
+    miniature: discord.Attachment = None
+):
     await interaction.response.defer(ephemeral=True)
+
+    if not isinstance(interaction.user, discord.Member):
+        await interaction.followup.send("❌ Erreur utilisateur.", ephemeral=True)
+        return
 
     if not has_message_permission(interaction.user):
         await interaction.followup.send(
@@ -382,20 +402,21 @@ async def message(interaction: discord.Interaction, texte: str):
         color=discord.Color.purple()
     )
 
-    if MESSAGE_LOGO_URL.startswith("https://"):
+    if miniature:
+        embed.set_thumbnail(url=miniature.url)
+    elif MESSAGE_LOGO_URL.startswith("https://"):
         embed.set_thumbnail(url=MESSAGE_LOGO_URL)
 
-    if MESSAGE_IMAGE_URL.startswith("https://"):
+    if image:
+        embed.set_image(url=image.url)
+    elif MESSAGE_IMAGE_URL.startswith("https://"):
         embed.set_image(url=MESSAGE_IMAGE_URL)
 
     embed.set_footer(text="Nebulix FA 💜")
 
     await interaction.channel.send(embed=embed)
 
-    await interaction.followup.send(
-        "✅ Message envoyé.",
-        ephemeral=True
-    )
+    await interaction.followup.send("✅ Message envoyé.", ephemeral=True)
 
 
 @client.tree.command(
@@ -427,10 +448,7 @@ async def clear(interaction: discord.Interaction, nombre: int):
     await interaction.response.defer(ephemeral=True)
 
     if nombre < 1 or nombre > 100:
-        await interaction.followup.send(
-            "❌ Choisis un nombre entre 1 et 100.",
-            ephemeral=True
-        )
+        await interaction.followup.send("❌ Choisis un nombre entre 1 et 100.", ephemeral=True)
         return
 
     deleted = await interaction.channel.purge(limit=nombre)
@@ -555,7 +573,6 @@ async def warn(interaction: discord.Interaction, membre: discord.Member, raison:
     user_id = str(membre.id)
 
     data["warnings"].setdefault(user_id, [])
-
     data["warnings"][user_id].append({
         "moderateur": interaction.user.id,
         "raison": raison
@@ -821,7 +838,6 @@ async def giveaway_end(
 @giveaway_start.error
 @giveaway_reroll.error
 @giveaway_end.error
-@classement.error
 async def command_error(interaction: discord.Interaction, error):
     if isinstance(error, app_commands.MissingRole):
         message_text = "❌ Tu n'as pas le rôle requis pour utiliser cette commande."
