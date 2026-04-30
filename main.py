@@ -16,7 +16,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1496551245186338886
 
 JOUEUR_ROLE_ID = 1496570449830871191
-FONDATEUR_ROLE_ID = 1496551245186338891  # Mets ici l'ID du rôle Fondateur
+FONDATEUR_ROLE_ID = 1496551245186338891
 WELCOME_CHANNEL_ID = 1497575977222668388
 GIVEAWAY_ROLE_ID = 1496551245186338891
 
@@ -302,11 +302,34 @@ async def on_message(message: discord.Message):
 )
 @app_commands.checks.has_role(FONDATEUR_ROLE_ID)
 async def classement(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
     data = load_data()
     invites_data = data.get("invites", {})
 
+    try:
+        guild_invites = await interaction.guild.invites()
+
+        for invite in guild_invites:
+            if invite.inviter:
+                inviter_id = str(invite.inviter.id)
+                invites_data[inviter_id] = max(
+                    invites_data.get(inviter_id, 0),
+                    invite.uses or 0
+                )
+
+        data["invites"] = invites_data
+        save_data(data)
+
+    except discord.Forbidden:
+        await interaction.followup.send(
+            "❌ Je n'ai pas la permission `Gérer le serveur` pour lire les invitations.",
+            ephemeral=True
+        )
+        return
+
     if not invites_data:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "❌ Aucun classement disponible.",
             ephemeral=True
         )
@@ -319,7 +342,6 @@ async def classement(interaction: discord.Interaction):
     )
 
     description = ""
-
     medals = ["🥇", "🥈", "🥉"]
 
     for index, (user_id, count) in enumerate(sorted_invites[:10], start=1):
@@ -336,7 +358,7 @@ async def classement(interaction: discord.Interaction):
     )
     embed.set_footer(text="Nebulix — Invitations")
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 @client.tree.command(
