@@ -16,7 +16,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1496551245186338886
 
 JOUEUR_ROLE_ID = 1496570449830871191
-FONDATEUR_ROLE_ID = 1496551245186338891
+FONDATEUR_ROLE_ID = 123456789012345678  # Remplace par l'ID du rôle Fondateur
 WELCOME_CHANNEL_ID = 1497575977222668388
 GIVEAWAY_ROLE_ID = 1496551245186338891
 
@@ -302,7 +302,7 @@ async def on_message(message: discord.Message):
 )
 @app_commands.checks.has_role(FONDATEUR_ROLE_ID)
 async def classement(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=False)
 
     data = load_data()
     invites_data = data.get("invites", {})
@@ -331,7 +331,7 @@ async def classement(interaction: discord.Interaction):
     if not invites_data:
         await interaction.followup.send(
             "❌ Aucun classement disponible.",
-            ephemeral=True
+            ephemeral=False
         )
         return
 
@@ -358,7 +358,7 @@ async def classement(interaction: discord.Interaction):
     )
     embed.set_footer(text="Nebulix — Invitations")
 
-    await interaction.followup.send(embed=embed)
+    await interaction.followup.send(embed=embed, ephemeral=False)
 
 
 @client.tree.command(
