@@ -16,8 +16,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1496551245186338886
 
 JOUEUR_ROLE_ID = 1496570449830871191
-FONDATEUR_ROLE_ID = 1496551245186338891  # Mets ici l'ID du rôle Fondateur
-
+FONDATEUR_ROLE_ID = 123456789012345678  # Mets ici l'ID du rôle Fondateur
 WELCOME_CHANNEL_ID = 1497575977222668388
 GIVEAWAY_ROLE_ID = 1496551245186338891
 
@@ -56,11 +55,18 @@ def load_data():
     if not os.path.exists(DATA_FILE):
         return {
             "log_channel_id": None,
-            "warnings": {}
+            "warnings": {},
+            "invites": {}
         }
 
     with open(DATA_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
+        data = json.load(file)
+
+    data.setdefault("log_channel_id", None)
+    data.setdefault("warnings", {})
+    data.setdefault("invites", {})
+
+    return data
 
 
 def save_data(data):
@@ -115,11 +121,7 @@ async def send_log(guild: discord.Guild, title: str, description: str, color=dis
     if not channel:
         return
 
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=color
-    )
+    embed = discord.Embed(title=title, description=description, color=color)
     embed.set_footer(text="Nebulix — Modération")
 
     await channel.send(embed=embed)
@@ -167,11 +169,6 @@ async def on_member_join(member: discord.Member):
         except discord.Forbidden:
             pass
 
-    channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
-
-    if not channel:
-        return
-
     inviter = None
     total_uses = 0
 
@@ -193,14 +190,26 @@ async def on_member_join(member: discord.Member):
     except discord.Forbidden:
         pass
 
-    inviter_text = inviter.mention if inviter else "Inconnu"
+    if inviter:
+        data = load_data()
+        inviter_id = str(inviter.id)
 
-    await channel.send(
-        f"👋 Bienvenue à {member.mention}\n"
-        f"📩 Il a été invité par {inviter_text}\n"
-        f"👑 Il a désormais **{total_uses} invitations**\n"
-        f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
-    )
+        data["invites"].setdefault(inviter_id, 0)
+        data["invites"][inviter_id] += 1
+
+        save_data(data)
+
+    channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
+
+    if channel:
+        inviter_text = inviter.mention if inviter else "Inconnu"
+
+        await channel.send(
+            f"👋 Bienvenue à {member.mention}\n"
+            f"📩 Il a été invité par {inviter_text}\n"
+            f"👑 Il a désormais **{total_uses} invitations**\n"
+            f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
+        )
 
 
 @client.event
@@ -216,7 +225,6 @@ async def on_message(message: discord.Message):
     if not has_joueur_role(member):
         return
 
-    # Anti-lien Discord sauf Fondateur
     if DISCORD_INVITE_REGEX.search(message.content) and not has_fondateur_role(member):
         try:
             await message.delete()
@@ -285,6 +293,50 @@ async def on_message(message: discord.Message):
             ),
             discord.Color.orange()
         )
+
+
+@client.tree.command(
+    name="classement",
+    description="Affiche le classement des invitations",
+    guild=discord.Object(id=GUILD_ID)
+)
+@app_commands.checks.has_role(FONDATEUR_ROLE_ID)
+async def classement(interaction: discord.Interaction):
+    data = load_data()
+    invites_data = data.get("invites", {})
+
+    if not invites_data:
+        await interaction.response.send_message(
+            "❌ Aucun classement disponible.",
+            ephemeral=True
+        )
+        return
+
+    sorted_invites = sorted(
+        invites_data.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    description = ""
+
+    medals = ["🥇", "🥈", "🥉"]
+
+    for index, (user_id, count) in enumerate(sorted_invites[:10], start=1):
+        member = interaction.guild.get_member(int(user_id))
+        name = member.mention if member else f"<@{user_id}>"
+        rank = medals[index - 1] if index <= 3 else f"**#{index}**"
+
+        description += f"{rank} {name} — **{count} invitation(s)**\n"
+
+    embed = discord.Embed(
+        title="🏆 Classement des invitations",
+        description=description,
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text="Nebulix — Invitations")
+
+    await interaction.response.send_message(embed=embed)
 
 
 @client.tree.command(
@@ -747,8 +799,14 @@ async def giveaway_end(
 @giveaway_start.error
 @giveaway_reroll.error
 @giveaway_end.error
+@classement.error
 async def command_error(interaction: discord.Interaction, error):
-    message_text = "❌ Tu n'as pas la permission ou une erreur est survenue."
+    if isinstance(error, app_commands.MissingRole):
+        message_text = "❌ Tu n'as pas le rôle requis pour utiliser cette commande."
+    elif isinstance(error, app_commands.MissingPermissions):
+        message_text = "❌ Tu n'as pas la permission d'utiliser cette commande."
+    else:
+        message_text = "❌ Une erreur est survenue."
 
     if interaction.response.is_done():
         await interaction.followup.send(message_text, ephemeral=True)
