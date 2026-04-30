@@ -16,6 +16,8 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = 1496551245186338886
 
 JOUEUR_ROLE_ID = 1496570449830871191
+FONDATEUR_ROLE_ID = 1496551245186338891  # Mets ici l'ID du rôle Fondateur
+
 WELCOME_CHANNEL_ID = 1497575977222668388
 GIVEAWAY_ROLE_ID = 1496551245186338891
 
@@ -52,7 +54,10 @@ DISCORD_INVITE_REGEX = re.compile(
 
 def load_data():
     if not os.path.exists(DATA_FILE):
-        return {"log_channel_id": None, "warnings": {}}
+        return {
+            "log_channel_id": None,
+            "warnings": {}
+        }
 
     with open(DATA_FILE, "r", encoding="utf-8") as file:
         return json.load(file)
@@ -63,25 +68,16 @@ def save_data(data):
         json.dump(data, file, indent=4, ensure_ascii=False)
 
 
-async def send_log(guild: discord.Guild, title: str, description: str, color=discord.Color.blurple()):
-    data = load_data()
-    channel_id = data.get("log_channel_id")
-
-    if not channel_id:
-        return
-
-    channel = guild.get_channel(channel_id)
-    if not channel:
-        return
-
-    embed = discord.Embed(title=title, description=description, color=color)
-    embed.set_footer(text="Nebulix — Modération")
-    await channel.send(embed=embed)
+def has_role(member: discord.Member, role_id: int):
+    return any(role.id == role_id for role in member.roles)
 
 
 def has_joueur_role(member: discord.Member):
-    role = member.guild.get_role(JOUEUR_ROLE_ID)
-    return role in member.roles if role else False
+    return has_role(member, JOUEUR_ROLE_ID)
+
+
+def has_fondateur_role(member: discord.Member):
+    return has_role(member, FONDATEUR_ROLE_ID)
 
 
 def has_message_permission(member: discord.Member):
@@ -103,8 +99,30 @@ def parse_duration(duration: str):
             return value * 86400
 
         return None
-    except:
+    except Exception:
         return None
+
+
+async def send_log(guild: discord.Guild, title: str, description: str, color=discord.Color.blurple()):
+    data = load_data()
+    channel_id = data.get("log_channel_id")
+
+    if not channel_id:
+        return
+
+    channel = guild.get_channel(channel_id)
+
+    if not channel:
+        return
+
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=color
+    )
+    embed.set_footer(text="Nebulix — Modération")
+
+    await channel.send(embed=embed)
 
 
 class MyClient(discord.Client):
@@ -132,7 +150,9 @@ async def on_ready():
     for guild in client.guilds:
         try:
             invites = await guild.invites()
-            invites_cache[guild.id] = {invite.code: invite.uses for invite in invites}
+            invites_cache[guild.id] = {
+                invite.code: invite.uses for invite in invites
+            }
         except discord.Forbidden:
             invites_cache[guild.id] = {}
 
@@ -149,35 +169,38 @@ async def on_member_join(member: discord.Member):
 
     channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
 
-    if channel:
-        inviter = None
-        total_uses = 0
+    if not channel:
+        return
 
-        try:
-            invites_before = invites_cache.get(member.guild.id, {})
-            invites_after = await member.guild.invites()
+    inviter = None
+    total_uses = 0
 
-            new_cache = {}
+    try:
+        invites_before = invites_cache.get(member.guild.id, {})
+        invites_after = await member.guild.invites()
 
-            for invite in invites_after:
-                new_cache[invite.code] = invite.uses
+        new_cache = {}
 
-                if invite.code in invites_before and invite.uses > invites_before[invite.code]:
-                    inviter = invite.inviter
-                    total_uses = invite.uses
+        for invite in invites_after:
+            new_cache[invite.code] = invite.uses
 
-            invites_cache[member.guild.id] = new_cache
-        except discord.Forbidden:
-            pass
+            if invite.code in invites_before and invite.uses > invites_before[invite.code]:
+                inviter = invite.inviter
+                total_uses = invite.uses
 
-        inviter_text = inviter.mention if inviter else "Inconnu"
+        invites_cache[member.guild.id] = new_cache
 
-        await channel.send(
-            f"👋 Bienvenue à {member.mention}\n"
-            f"📩 Il a été invité par {inviter_text}\n"
-            f"👑 Il a désormais **{total_uses} invitations**\n"
-            f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
-        )
+    except discord.Forbidden:
+        pass
+
+    inviter_text = inviter.mention if inviter else "Inconnu"
+
+    await channel.send(
+        f"👋 Bienvenue à {member.mention}\n"
+        f"📩 Il a été invité par {inviter_text}\n"
+        f"👑 Il a désormais **{total_uses} invitations**\n"
+        f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
+    )
 
 
 @client.event
@@ -193,7 +216,8 @@ async def on_message(message: discord.Message):
     if not has_joueur_role(member):
         return
 
-    if DISCORD_INVITE_REGEX.search(message.content):
+    # Anti-lien Discord sauf Fondateur
+    if DISCORD_INVITE_REGEX.search(message.content) and not has_fondateur_role(member):
         try:
             await message.delete()
         except discord.Forbidden:
@@ -225,9 +249,7 @@ async def on_message(message: discord.Message):
     now = time.time()
     user_id = member.id
 
-    if user_id not in spam_cache:
-        spam_cache[user_id] = []
-
+    spam_cache.setdefault(user_id, [])
     spam_cache[user_id].append(now)
 
     spam_cache[user_id] = [
@@ -274,39 +296,32 @@ async def on_message(message: discord.Message):
 async def message(interaction: discord.Interaction, texte: str):
     await interaction.response.defer(ephemeral=True)
 
-    try:
-        if not has_message_permission(interaction.user):
-            await interaction.followup.send(
-                "❌ Tu n'as pas la permission d'utiliser cette commande.",
-                ephemeral=True
-            )
-            return
-
-        embed = discord.Embed(
-            description=texte,
-            color=discord.Color.purple()
-        )
-
-        if MESSAGE_LOGO_URL and MESSAGE_LOGO_URL.startswith("https://"):
-            embed.set_thumbnail(url=MESSAGE_LOGO_URL)
-
-        if MESSAGE_IMAGE_URL and MESSAGE_IMAGE_URL.startswith("https://"):
-            embed.set_image(url=MESSAGE_IMAGE_URL)
-
-        embed.set_footer(text="Nebulix FA 💜")
-
-        await interaction.channel.send(embed=embed)
-
+    if not has_message_permission(interaction.user):
         await interaction.followup.send(
-            "✅ Message envoyé.",
+            "❌ Tu n'as pas la permission d'utiliser cette commande.",
             ephemeral=True
         )
+        return
 
-    except Exception as e:
-        await interaction.followup.send(
-            f"❌ Erreur : `{e}`",
-            ephemeral=True
-        )
+    embed = discord.Embed(
+        description=texte,
+        color=discord.Color.purple()
+    )
+
+    if MESSAGE_LOGO_URL.startswith("https://"):
+        embed.set_thumbnail(url=MESSAGE_LOGO_URL)
+
+    if MESSAGE_IMAGE_URL.startswith("https://"):
+        embed.set_image(url=MESSAGE_IMAGE_URL)
+
+    embed.set_footer(text="Nebulix FA 💜")
+
+    await interaction.channel.send(embed=embed)
+
+    await interaction.followup.send(
+        "✅ Message envoyé.",
+        ephemeral=True
+    )
 
 
 @client.tree.command(
@@ -338,12 +353,18 @@ async def clear(interaction: discord.Interaction, nombre: int):
     await interaction.response.defer(ephemeral=True)
 
     if nombre < 1 or nombre > 100:
-        await interaction.followup.send("❌ Choisis un nombre entre 1 et 100.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Choisis un nombre entre 1 et 100.",
+            ephemeral=True
+        )
         return
 
     deleted = await interaction.channel.purge(limit=nombre)
 
-    await interaction.followup.send(f"✅ {len(deleted)} message(s) supprimé(s).", ephemeral=True)
+    await interaction.followup.send(
+        f"✅ {len(deleted)} message(s) supprimé(s).",
+        ephemeral=True
+    )
 
 
 @client.tree.command(
@@ -365,7 +386,11 @@ async def kick(interaction: discord.Interaction, membre: discord.Member, raison:
         return
 
     await membre.kick(reason=raison)
-    await interaction.followup.send(f"✅ {membre.mention} a été kick.\n📄 Raison : {raison}", ephemeral=True)
+
+    await interaction.followup.send(
+        f"✅ {membre.mention} a été kick.\n📄 Raison : {raison}",
+        ephemeral=True
+    )
 
 
 @client.tree.command(
@@ -387,7 +412,11 @@ async def ban(interaction: discord.Interaction, membre: discord.Member, raison: 
         return
 
     await membre.ban(reason=raison)
-    await interaction.followup.send(f"✅ {membre.mention} a été banni.\n📄 Raison : {raison}", ephemeral=True)
+
+    await interaction.followup.send(
+        f"✅ {membre.mention} a été banni.\n📄 Raison : {raison}",
+        ephemeral=True
+    )
 
 
 @client.tree.command(
@@ -401,11 +430,17 @@ async def mute(interaction: discord.Interaction, membre: discord.Member, minutes
     await interaction.response.defer(ephemeral=True)
 
     if minutes < 1 or minutes > 40320:
-        await interaction.followup.send("❌ Durée invalide. Maximum : 40320 minutes.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Durée invalide. Maximum : 40320 minutes.",
+            ephemeral=True
+        )
         return
 
     if membre.top_role >= interaction.guild.me.top_role:
-        await interaction.followup.send("❌ Mon rôle est trop bas pour mute ce membre.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Mon rôle est trop bas pour mute ce membre.",
+            ephemeral=True
+        )
         return
 
     await membre.timeout(timedelta(minutes=minutes), reason=raison)
@@ -428,7 +463,10 @@ async def unmute(interaction: discord.Interaction, membre: discord.Member, raiso
 
     await membre.timeout(None, reason=raison)
 
-    await interaction.followup.send(f"✅ {membre.mention} a été unmute.\n📄 Raison : {raison}", ephemeral=True)
+    await interaction.followup.send(
+        f"✅ {membre.mention} a été unmute.\n📄 Raison : {raison}",
+        ephemeral=True
+    )
 
 
 @client.tree.command(
@@ -442,8 +480,7 @@ async def warn(interaction: discord.Interaction, membre: discord.Member, raison:
     data = load_data()
     user_id = str(membre.id)
 
-    if user_id not in data["warnings"]:
-        data["warnings"][user_id] = []
+    data["warnings"].setdefault(user_id, [])
 
     data["warnings"][user_id].append({
         "moderateur": interaction.user.id,
@@ -470,7 +507,10 @@ async def warnings(interaction: discord.Interaction, membre: discord.Member):
     warns = data["warnings"].get(str(membre.id), [])
 
     if not warns:
-        await interaction.response.send_message(f"✅ {membre.mention} n'a aucun avertissement.", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ {membre.mention} n'a aucun avertissement.",
+            ephemeral=True
+        )
         return
 
     description = ""
@@ -534,7 +574,10 @@ async def giveaway_start(
     seconds = parse_duration(durée)
 
     if seconds is None:
-        await interaction.followup.send("❌ Durée invalide. Exemple : `10m`, `1h`, `1d`.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Durée invalide. Exemple : `10m`, `1h`, `1d`.",
+            ephemeral=True
+        )
         return
 
     embed = discord.Embed(
@@ -551,7 +594,10 @@ async def giveaway_start(
     giveaway_message = await salon.send(embed=embed)
     await giveaway_message.add_reaction("🎉")
 
-    await interaction.followup.send(f"✅ Giveaway lancé dans {salon.mention}.", ephemeral=True)
+    await interaction.followup.send(
+        f"✅ Giveaway lancé dans {salon.mention}.",
+        ephemeral=True
+    )
 
     await asyncio.sleep(seconds)
 
@@ -575,7 +621,9 @@ async def giveaway_start(
     winners = random.sample(participants, min(gagnants, len(participants)))
     winners_mentions = ", ".join(winner.mention for winner in winners)
 
-    await salon.send(f"🎉 Félicitations {winners_mentions} ! Vous avez gagné **{récompense}** !")
+    await salon.send(
+        f"🎉 Félicitations {winners_mentions} ! Vous avez gagné **{récompense}** !"
+    )
 
 
 @client.tree.command(
@@ -590,14 +638,20 @@ async def giveaway_reroll(interaction: discord.Interaction, message_id: str, gag
 
     try:
         giveaway_message = await interaction.channel.fetch_message(int(message_id))
-    except:
-        await interaction.followup.send("❌ Message introuvable dans ce salon.", ephemeral=True)
+    except Exception:
+        await interaction.followup.send(
+            "❌ Message introuvable dans ce salon.",
+            ephemeral=True
+        )
         return
 
     reaction = discord.utils.get(giveaway_message.reactions, emoji="🎉")
 
     if not reaction:
-        await interaction.followup.send("❌ Aucun participant trouvé.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Aucun participant trouvé.",
+            ephemeral=True
+        )
         return
 
     participants = []
@@ -607,13 +661,19 @@ async def giveaway_reroll(interaction: discord.Interaction, message_id: str, gag
             participants.append(user)
 
     if not participants:
-        await interaction.followup.send("❌ Aucun participant valide.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Aucun participant valide.",
+            ephemeral=True
+        )
         return
 
     winners = random.sample(participants, min(gagnants, len(participants)))
     winners_mentions = ", ".join(winner.mention for winner in winners)
 
-    await interaction.followup.send(f"🎉 Nouveau gagnant : {winners_mentions}", ephemeral=False)
+    await interaction.followup.send(
+        f"🎉 Nouveau gagnant : {winners_mentions}",
+        ephemeral=False
+    )
 
 
 @client.tree.command(
@@ -637,14 +697,20 @@ async def giveaway_end(
 
     try:
         giveaway_message = await interaction.channel.fetch_message(int(message_id))
-    except:
-        await interaction.followup.send("❌ Message introuvable dans ce salon.", ephemeral=True)
+    except Exception:
+        await interaction.followup.send(
+            "❌ Message introuvable dans ce salon.",
+            ephemeral=True
+        )
         return
 
     reaction = discord.utils.get(giveaway_message.reactions, emoji="🎉")
 
     if not reaction:
-        await interaction.followup.send("❌ Aucun participant trouvé.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Aucun participant trouvé.",
+            ephemeral=True
+        )
         return
 
     participants = []
@@ -654,13 +720,19 @@ async def giveaway_end(
             participants.append(user)
 
     if not participants:
-        await interaction.followup.send("❌ Aucun participant valide.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Aucun participant valide.",
+            ephemeral=True
+        )
         return
 
     winners = random.sample(participants, min(gagnants, len(participants)))
     winners_mentions = ", ".join(winner.mention for winner in winners)
 
-    await interaction.followup.send(f"✅ Giveaway terminé. Gagnant(s) : {winners_mentions}", ephemeral=False)
+    await interaction.followup.send(
+        f"✅ Giveaway terminé. Gagnant(s) : {winners_mentions}",
+        ephemeral=False
+    )
 
 
 @logs_channel.error
