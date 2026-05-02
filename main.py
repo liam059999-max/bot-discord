@@ -20,7 +20,7 @@ FONDATEUR_ROLE_ID = 1496551245186338891
 WELCOME_CHANNEL_ID = 1497575977222668388
 GIVEAWAY_ROLE_ID = 1496551245186338891
 
-NEBULIXRP_INVITE_LINK = "https://discord.gg/nebulixrp"
+NEBULIXRP_INVITE_CODE = "nebulixrp"
 
 MESSAGE_IMAGE_URL = "TON_LIEN_IMAGE_ICI"
 MESSAGE_LOGO_URL = "https://i.ibb.co/5gLvzLcD/n-bulix.png"
@@ -214,6 +214,7 @@ async def on_member_join(member: discord.Member):
 
     inviter = None
     total_uses = 0
+    used_invite_code = None
 
     try:
         invites_before = invites_cache.get(member.guild.id, {})
@@ -226,13 +227,14 @@ async def on_member_join(member: discord.Member):
             if invite.code in invites_before and invite.uses > invites_before[invite.code]:
                 inviter = invite.inviter
                 total_uses = invite.uses or 0
+                used_invite_code = invite.code
 
         invites_cache[member.guild.id] = new_cache
 
     except discord.Forbidden:
         pass
 
-    if inviter:
+    if inviter and used_invite_code and used_invite_code.lower() != NEBULIXRP_INVITE_CODE:
         data = load_data()
         inviter_id = str(inviter.id)
 
@@ -247,11 +249,11 @@ async def on_member_join(member: discord.Member):
         inviter_text = inviter.mention if inviter else "l'url de Nebulix RP"
 
         await channel.send(
-    f"👋 Bienvenue à {member.mention}\n"
-    f"📩 Il a rejoint avec {inviter_text}\n"
-    f"👑 Il a désormais **{total_uses} invitation(s)**\n"
-    f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
-)
+            f"👋 Bienvenue à {member.mention}\n"
+            f"📩 Il a rejoint avec {inviter_text}\n"
+            f"👑 Il a désormais **{total_uses} invitation(s)**\n"
+            f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
+        )
 
 
 @client.event
@@ -351,7 +353,11 @@ async def on_message(message: discord.Message):
         )
 
 
-@client.tree.command(name="classement", description="Affiche le classement des invitations", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="classement",
+    description="Affiche le classement des invitations",
+    guild=discord.Object(id=GUILD_ID)
+)
 async def classement(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
 
@@ -360,7 +366,10 @@ async def classement(interaction: discord.Interaction):
         return
 
     if not has_fondateur_role(interaction.user):
-        await interaction.followup.send("❌ Seuls les Fondateurs peuvent utiliser cette commande.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Seuls les Fondateurs peuvent utiliser cette commande.",
+            ephemeral=True
+        )
         return
 
     data = load_data()
@@ -370,22 +379,33 @@ async def classement(interaction: discord.Interaction):
         guild_invites = await interaction.guild.invites()
 
         for invite in guild_invites:
-            if invite.inviter:
+            if invite.inviter and invite.code.lower() != NEBULIXRP_INVITE_CODE:
                 inviter_id = str(invite.inviter.id)
-                invites_data[inviter_id] = max(invites_data.get(inviter_id, 0), invite.uses or 0)
+                invites_data[inviter_id] = max(
+                    invites_data.get(inviter_id, 0),
+                    invite.uses or 0
+                )
 
         data["invites"] = invites_data
         save_data(data)
 
     except discord.Forbidden:
-        await interaction.followup.send("❌ Je n'ai pas la permission `Gérer le serveur` pour lire les invitations.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Je n'ai pas la permission `Gérer le serveur` pour lire les invitations.",
+            ephemeral=True
+        )
         return
 
     if not invites_data:
         await interaction.followup.send("❌ Aucun classement disponible.")
         return
 
-    sorted_invites = sorted(invites_data.items(), key=lambda x: x[1], reverse=True)
+    sorted_invites = sorted(
+        invites_data.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
     description = ""
     medals = ["🥇", "🥈", "🥉"]
 
@@ -393,17 +413,35 @@ async def classement(interaction: discord.Interaction):
         member = interaction.guild.get_member(int(user_id))
         name = member.mention if member else f"<@{user_id}>"
         rank = medals[index - 1] if index <= 3 else f"**#{index}**"
+
         description += f"{rank} {name} — **{count} invitation(s)**\n"
 
-    embed = discord.Embed(title="🏆 Classement des invitations", description=description, color=discord.Color.gold())
+    embed = discord.Embed(
+        title="🏆 Classement des invitations",
+        description=description,
+        color=discord.Color.gold()
+    )
     embed.set_footer(text="Nebulix — Invitations")
 
     await interaction.followup.send(embed=embed)
 
 
-@client.tree.command(name="message", description="Fait parler le bot avec un embed", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(texte="Le message à envoyer dans l'embed", image="Image principale à ajouter", miniature="Petite image en haut à droite")
-async def message(interaction: discord.Interaction, texte: str, image: discord.Attachment = None, miniature: discord.Attachment = None):
+@client.tree.command(
+    name="message",
+    description="Fait parler le bot avec un embed",
+    guild=discord.Object(id=GUILD_ID)
+)
+@app_commands.describe(
+    texte="Le message à envoyer dans l'embed",
+    image="Image principale à ajouter",
+    miniature="Petite image en haut à droite"
+)
+async def message(
+    interaction: discord.Interaction,
+    texte: str,
+    image: discord.Attachment = None,
+    miniature: discord.Attachment = None
+):
     await interaction.response.defer(ephemeral=True)
 
     if not isinstance(interaction.user, discord.Member):
@@ -411,10 +449,16 @@ async def message(interaction: discord.Interaction, texte: str, image: discord.A
         return
 
     if not has_message_permission(interaction.user):
-        await interaction.followup.send("❌ Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Tu n'as pas la permission d'utiliser cette commande.",
+            ephemeral=True
+        )
         return
 
-    embed = discord.Embed(description=texte, color=discord.Color.purple())
+    embed = discord.Embed(
+        description=texte,
+        color=discord.Color.purple()
+    )
 
     if miniature:
         embed.set_thumbnail(url=miniature.url)
@@ -432,7 +476,11 @@ async def message(interaction: discord.Interaction, texte: str, image: discord.A
     await interaction.followup.send("✅ Message envoyé.", ephemeral=True)
 
 
-@client.tree.command(name="logs-channel", description="Définit le salon des logs de modération", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="logs-channel",
+    description="Définit le salon des logs de modération",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(salon="Salon où envoyer les logs")
 @app_commands.checks.has_permissions(administrator=True)
 async def logs_channel(interaction: discord.Interaction, salon: discord.TextChannel):
@@ -440,10 +488,17 @@ async def logs_channel(interaction: discord.Interaction, salon: discord.TextChan
     data["log_channel_id"] = salon.id
     save_data(data)
 
-    await interaction.response.send_message(f"✅ Salon logs défini sur {salon.mention}.", ephemeral=True)
+    await interaction.response.send_message(
+        f"✅ Salon logs défini sur {salon.mention}.",
+        ephemeral=True
+    )
 
 
-@client.tree.command(name="clear", description="Supprime un nombre de messages", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="clear",
+    description="Supprime un nombre de messages",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(nombre="Nombre de messages à supprimer")
 @app_commands.checks.has_permissions(manage_messages=True)
 async def clear(interaction: discord.Interaction, nombre: int):
@@ -454,13 +509,25 @@ async def clear(interaction: discord.Interaction, nombre: int):
         return
 
     deleted = await interaction.channel.purge(limit=nombre)
-    await interaction.followup.send(f"✅ {len(deleted)} message(s) supprimé(s).", ephemeral=True)
+
+    await interaction.followup.send(
+        f"✅ {len(deleted)} message(s) supprimé(s).",
+        ephemeral=True
+    )
 
 
-@client.tree.command(name="kick", description="Expulse un membre du serveur", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="kick",
+    description="Expulse un membre du serveur",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(membre="Membre à expulser", raison="Raison du kick")
 @app_commands.checks.has_permissions(kick_members=True)
-async def kick(interaction: discord.Interaction, membre: discord.Member, raison: str = "Aucune raison donnée"):
+async def kick(
+    interaction: discord.Interaction,
+    membre: discord.Member,
+    raison: str = "Aucune raison donnée"
+):
     await interaction.response.defer(ephemeral=True)
 
     if membre == interaction.user:
@@ -472,13 +539,25 @@ async def kick(interaction: discord.Interaction, membre: discord.Member, raison:
         return
 
     await membre.kick(reason=raison)
-    await interaction.followup.send(f"✅ {membre.mention} a été kick.\n📄 Raison : {raison}", ephemeral=True)
+
+    await interaction.followup.send(
+        f"✅ {membre.mention} a été kick.\n📄 Raison : {raison}",
+        ephemeral=True
+    )
 
 
-@client.tree.command(name="ban", description="Bannit un membre du serveur", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="ban",
+    description="Bannit un membre du serveur",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(membre="Membre à bannir", raison="Raison du ban")
 @app_commands.checks.has_permissions(ban_members=True)
-async def ban(interaction: discord.Interaction, membre: discord.Member, raison: str = "Aucune raison donnée"):
+async def ban(
+    interaction: discord.Interaction,
+    membre: discord.Member,
+    raison: str = "Aucune raison donnée"
+):
     await interaction.response.defer(ephemeral=True)
 
     if membre == interaction.user:
@@ -490,38 +569,81 @@ async def ban(interaction: discord.Interaction, membre: discord.Member, raison: 
         return
 
     await membre.ban(reason=raison)
-    await interaction.followup.send(f"✅ {membre.mention} a été banni.\n📄 Raison : {raison}", ephemeral=True)
+
+    await interaction.followup.send(
+        f"✅ {membre.mention} a été banni.\n📄 Raison : {raison}",
+        ephemeral=True
+    )
 
 
-@client.tree.command(name="mute", description="Met un membre en timeout", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(membre="Membre à mute", minutes="Durée en minutes", raison="Raison du mute")
+@client.tree.command(
+    name="mute",
+    description="Met un membre en timeout",
+    guild=discord.Object(id=GUILD_ID)
+)
+@app_commands.describe(
+    membre="Membre à mute",
+    minutes="Durée en minutes",
+    raison="Raison du mute"
+)
 @app_commands.checks.has_permissions(moderate_members=True)
-async def mute(interaction: discord.Interaction, membre: discord.Member, minutes: int, raison: str = "Aucune raison donnée"):
+async def mute(
+    interaction: discord.Interaction,
+    membre: discord.Member,
+    minutes: int,
+    raison: str = "Aucune raison donnée"
+):
     await interaction.response.defer(ephemeral=True)
 
     if minutes < 1 or minutes > 40320:
-        await interaction.followup.send("❌ Durée invalide. Maximum : 40320 minutes.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Durée invalide. Maximum : 40320 minutes.",
+            ephemeral=True
+        )
         return
 
     if membre.top_role >= interaction.guild.me.top_role:
-        await interaction.followup.send("❌ Mon rôle est trop bas pour mute ce membre.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Mon rôle est trop bas pour mute ce membre.",
+            ephemeral=True
+        )
         return
 
     await membre.timeout(timedelta(minutes=minutes), reason=raison)
-    await interaction.followup.send(f"✅ {membre.mention} a été mute pendant {minutes} minute(s).\n📄 Raison : {raison}", ephemeral=True)
+
+    await interaction.followup.send(
+        f"✅ {membre.mention} a été mute pendant {minutes} minute(s).\n📄 Raison : {raison}",
+        ephemeral=True
+    )
 
 
-@client.tree.command(name="unmute", description="Retire le timeout d'un membre", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="unmute",
+    description="Retire le timeout d'un membre",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(membre="Membre à unmute", raison="Raison du unmute")
 @app_commands.checks.has_permissions(moderate_members=True)
-async def unmute(interaction: discord.Interaction, membre: discord.Member, raison: str = "Aucune raison donnée"):
+async def unmute(
+    interaction: discord.Interaction,
+    membre: discord.Member,
+    raison: str = "Aucune raison donnée"
+):
     await interaction.response.defer(ephemeral=True)
 
     await membre.timeout(None, reason=raison)
-    await interaction.followup.send(f"✅ {membre.mention} a été unmute.\n📄 Raison : {raison}", ephemeral=True)
+
+    await interaction.followup.send(
+        f"✅ {membre.mention} a été unmute.\n📄 Raison : {raison}",
+        ephemeral=True
+    )
 
 
-@client.tree.command(name="warn", description="Avertit un membre", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="warn",
+    description="Avertit un membre",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(membre="Membre à avertir", raison="Raison du warn")
 @app_commands.checks.has_permissions(manage_messages=True)
 async def warn(interaction: discord.Interaction, membre: discord.Member, raison: str):
@@ -529,14 +651,24 @@ async def warn(interaction: discord.Interaction, membre: discord.Member, raison:
     user_id = str(membre.id)
 
     data["warnings"].setdefault(user_id, [])
-    data["warnings"][user_id].append({"moderateur": interaction.user.id, "raison": raison})
+    data["warnings"][user_id].append({
+        "moderateur": interaction.user.id,
+        "raison": raison
+    })
 
     save_data(data)
 
-    await interaction.response.send_message(f"⚠️ {membre.mention} a reçu un avertissement.\n📄 Raison : {raison}", ephemeral=True)
+    await interaction.response.send_message(
+        f"⚠️ {membre.mention} a reçu un avertissement.\n📄 Raison : {raison}",
+        ephemeral=True
+    )
 
 
-@client.tree.command(name="warnings", description="Affiche les avertissements d'un membre", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="warnings",
+    description="Affiche les avertissements d'un membre",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(membre="Membre à vérifier")
 @app_commands.checks.has_permissions(manage_messages=True)
 async def warnings(interaction: discord.Interaction, membre: discord.Member):
@@ -544,7 +676,10 @@ async def warnings(interaction: discord.Interaction, membre: discord.Member):
     warns = data["warnings"].get(str(membre.id), [])
 
     if not warns:
-        await interaction.response.send_message(f"✅ {membre.mention} n'a aucun avertissement.", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ {membre.mention} n'a aucun avertissement.",
+            ephemeral=True
+        )
         return
 
     description = ""
@@ -554,11 +689,20 @@ async def warnings(interaction: discord.Interaction, membre: discord.Member):
         raison = warn_data["raison"]
         description += f"**{index}.** Modérateur : <@{mod_id}>\nRaison : {raison}\n\n"
 
-    embed = discord.Embed(title=f"⚠️ Avertissements de {membre}", description=description, color=discord.Color.yellow())
+    embed = discord.Embed(
+        title=f"⚠️ Avertissements de {membre}",
+        description=description,
+        color=discord.Color.yellow()
+    )
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@client.tree.command(name="clear-warns", description="Supprime tous les avertissements d'un membre", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="clear-warns",
+    description="Supprime tous les avertissements d'un membre",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(membre="Membre dont les warns doivent être supprimés")
 @app_commands.checks.has_permissions(manage_messages=True)
 async def clear_warns(interaction: discord.Interaction, membre: discord.Member):
@@ -569,19 +713,40 @@ async def clear_warns(interaction: discord.Interaction, membre: discord.Member):
         del data["warnings"][user_id]
         save_data(data)
 
-    await interaction.response.send_message(f"✅ Tous les avertissements de {membre.mention} ont été supprimés.", ephemeral=True)
+    await interaction.response.send_message(
+        f"✅ Tous les avertissements de {membre.mention} ont été supprimés.",
+        ephemeral=True
+    )
 
 
-@client.tree.command(name="giveaway-start", description="Lance un giveaway", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(salon="Salon où envoyer le giveaway", durée="Durée : 10m, 1h, 1d", gagnants="Nombre de gagnants", récompense="Récompense")
+@client.tree.command(
+    name="giveaway-start",
+    description="Lance un giveaway",
+    guild=discord.Object(id=GUILD_ID)
+)
+@app_commands.describe(
+    salon="Salon où envoyer le giveaway",
+    durée="Durée : 10m, 1h, 1d",
+    gagnants="Nombre de gagnants",
+    récompense="Récompense"
+)
 @app_commands.checks.has_role(GIVEAWAY_ROLE_ID)
-async def giveaway_start(interaction: discord.Interaction, salon: discord.TextChannel, durée: str, gagnants: int, récompense: str):
+async def giveaway_start(
+    interaction: discord.Interaction,
+    salon: discord.TextChannel,
+    durée: str,
+    gagnants: int,
+    récompense: str
+):
     await interaction.response.defer(ephemeral=True)
 
     seconds = parse_duration(durée)
 
     if seconds is None:
-        await interaction.followup.send("❌ Durée invalide. Exemple : `10m`, `1h`, `1d`.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Durée invalide. Exemple : `10m`, `1h`, `1d`.",
+            ephemeral=True
+        )
         return
 
     embed = discord.Embed(
@@ -598,7 +763,10 @@ async def giveaway_start(interaction: discord.Interaction, salon: discord.TextCh
     giveaway_message = await salon.send(embed=embed)
     await giveaway_message.add_reaction("🎉")
 
-    await interaction.followup.send(f"✅ Giveaway lancé dans {salon.mention}.", ephemeral=True)
+    await interaction.followup.send(
+        f"✅ Giveaway lancé dans {salon.mention}.",
+        ephemeral=True
+    )
 
     await asyncio.sleep(seconds)
 
@@ -622,25 +790,41 @@ async def giveaway_start(interaction: discord.Interaction, salon: discord.TextCh
     winners = random.sample(participants, min(gagnants, len(participants)))
     winners_mentions = ", ".join(winner.mention for winner in winners)
 
-    await salon.send(f"🎉 Félicitations {winners_mentions} ! Vous avez gagné **{récompense}** !")
+    await salon.send(
+        f"🎉 Félicitations {winners_mentions} ! Vous avez gagné **{récompense}** !"
+    )
 
 
-@client.tree.command(name="giveaway-reroll", description="Relance un tirage sur un giveaway", guild=discord.Object(id=GUILD_ID))
+@client.tree.command(
+    name="giveaway-reroll",
+    description="Relance un tirage sur un giveaway",
+    guild=discord.Object(id=GUILD_ID)
+)
 @app_commands.describe(message_id="ID du message giveaway", gagnants="Nombre de nouveaux gagnants")
 @app_commands.checks.has_role(GIVEAWAY_ROLE_ID)
-async def giveaway_reroll(interaction: discord.Interaction, message_id: str, gagnants: int = 1):
+async def giveaway_reroll(
+    interaction: discord.Interaction,
+    message_id: str,
+    gagnants: int = 1
+):
     await interaction.response.defer(ephemeral=True)
 
     try:
         giveaway_message = await interaction.channel.fetch_message(int(message_id))
     except Exception:
-        await interaction.followup.send("❌ Message introuvable dans ce salon.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Message introuvable dans ce salon.",
+            ephemeral=True
+        )
         return
 
     reaction = discord.utils.get(giveaway_message.reactions, emoji="🎉")
 
     if not reaction:
-        await interaction.followup.send("❌ Aucun participant trouvé.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Aucun participant trouvé.",
+            ephemeral=True
+        )
         return
 
     participants = []
@@ -650,31 +834,56 @@ async def giveaway_reroll(interaction: discord.Interaction, message_id: str, gag
             participants.append(user)
 
     if not participants:
-        await interaction.followup.send("❌ Aucun participant valide.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Aucun participant valide.",
+            ephemeral=True
+        )
         return
 
     winners = random.sample(participants, min(gagnants, len(participants)))
     winners_mentions = ", ".join(winner.mention for winner in winners)
 
-    await interaction.followup.send(f"🎉 Nouveau gagnant : {winners_mentions}", ephemeral=False)
+    await interaction.followup.send(
+        f"🎉 Nouveau gagnant : {winners_mentions}",
+        ephemeral=False
+    )
 
 
-@client.tree.command(name="giveaway-end", description="Termine un giveaway immédiatement", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(message_id="ID du message giveaway", récompense="Récompense du giveaway", gagnants="Nombre de gagnants")
+@client.tree.command(
+    name="giveaway-end",
+    description="Termine un giveaway immédiatement",
+    guild=discord.Object(id=GUILD_ID)
+)
+@app_commands.describe(
+    message_id="ID du message giveaway",
+    récompense="Récompense du giveaway",
+    gagnants="Nombre de gagnants"
+)
 @app_commands.checks.has_role(GIVEAWAY_ROLE_ID)
-async def giveaway_end(interaction: discord.Interaction, message_id: str, récompense: str, gagnants: int = 1):
+async def giveaway_end(
+    interaction: discord.Interaction,
+    message_id: str,
+    récompense: str,
+    gagnants: int = 1
+):
     await interaction.response.defer(ephemeral=True)
 
     try:
         giveaway_message = await interaction.channel.fetch_message(int(message_id))
     except Exception:
-        await interaction.followup.send("❌ Message introuvable dans ce salon.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Message introuvable dans ce salon.",
+            ephemeral=True
+        )
         return
 
     reaction = discord.utils.get(giveaway_message.reactions, emoji="🎉")
 
     if not reaction:
-        await interaction.followup.send("❌ Aucun participant trouvé.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Aucun participant trouvé.",
+            ephemeral=True
+        )
         return
 
     participants = []
@@ -684,13 +893,19 @@ async def giveaway_end(interaction: discord.Interaction, message_id: str, récom
             participants.append(user)
 
     if not participants:
-        await interaction.followup.send("❌ Aucun participant valide.", ephemeral=True)
+        await interaction.followup.send(
+            "❌ Aucun participant valide.",
+            ephemeral=True
+        )
         return
 
     winners = random.sample(participants, min(gagnants, len(participants)))
     winners_mentions = ", ".join(winner.mention for winner in winners)
 
-    await interaction.followup.send(f"✅ Giveaway terminé. Gagnant(s) : {winners_mentions}", ephemeral=False)
+    await interaction.followup.send(
+        f"✅ Giveaway terminé. Gagnant(s) : {winners_mentions}",
+        ephemeral=False
+    )
 
 
 @logs_channel.error
