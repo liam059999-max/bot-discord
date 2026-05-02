@@ -36,6 +36,14 @@ ROLES_MESSAGE_IDS = [
     1496551245207572577
 ]
 
+ALLOWED_DISCORD_LINK_CHANNEL_IDS = {
+    1496551247208124565,
+    1496551247208124567,
+    1497584379407630560,
+    1496551247208124566,
+    1497584715115397220
+}
+
 DATA_FILE = "moderation.json"
 
 SPAM_LIMIT = 5
@@ -225,14 +233,17 @@ async def on_message(message: discord.Message):
     if not has_joueur_role(member):
         return
 
-    if DISCORD_INVITE_REGEX.search(message.content) and not has_fondateur_role(member):
+    if (
+        DISCORD_INVITE_REGEX.search(message.content)
+        and message.channel.id not in ALLOWED_DISCORD_LINK_CHANNEL_IDS
+    ):
         try:
             await message.delete()
         except discord.Forbidden:
             pass
 
         try:
-            await member.kick(reason="Lien Discord interdit")
+            await member.kick(reason="Lien Discord interdit hors salons autorisés")
         except discord.Forbidden:
             await send_log(
                 message.guild,
@@ -247,7 +258,7 @@ async def on_message(message: discord.Message):
             "🚫 Kick automatique",
             (
                 f"**Membre :** {member.mention}\n"
-                f"**Raison :** Lien Discord interdit\n"
+                f"**Raison :** Lien Discord interdit hors salons autorisés\n"
                 f"**Salon :** {message.channel.mention}"
             ),
             discord.Color.red()
