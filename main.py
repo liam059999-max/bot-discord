@@ -253,6 +253,17 @@ async def on_member_join(member: discord.Member):
 
 
 @client.event
+async def on_member_remove(member: discord.Member):
+    channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
+
+    if channel:
+        await channel.send(
+            f"👋 **{member}** nous a quitté\n"
+            f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
+        )
+
+
+@client.event
 async def on_message(message: discord.Message):
     if message.author.bot or not message.guild:
         return
