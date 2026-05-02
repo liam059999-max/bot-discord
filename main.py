@@ -23,6 +23,14 @@ GIVEAWAY_ROLE_ID = 1496551245186338891
 MESSAGE_IMAGE_URL = "TON_LIEN_IMAGE_ICI"
 MESSAGE_LOGO_URL = "https://i.ibb.co/5gLvzLcD/n-bulix.png"
 
+JOUEUR_POST_CHANNEL_IDS = [
+    1496551247208124565,
+    1496551247208124567,
+    1497584379407630560,
+    1496551247208124566,
+    1497584715115397220
+]
+
 ROLES_MESSAGE_IDS = [
     1496551245186338890,
     1496551245186338891,
@@ -36,13 +44,7 @@ ROLES_MESSAGE_IDS = [
     1496551245207572577
 ]
 
-ALLOWED_DISCORD_LINK_CHANNEL_IDS = {
-    1496551247208124565,
-    1496551247208124567,
-    1497584379407630560,
-    1496551247208124566,
-    1497584715115397220
-}
+ALLOWED_DISCORD_LINK_CHANNEL_IDS = set(JOUEUR_POST_CHANNEL_IDS)
 
 DATA_FILE = "moderation.json"
 
@@ -135,6 +137,35 @@ async def send_log(guild: discord.Guild, title: str, description: str, color=dis
     await channel.send(embed=embed)
 
 
+async def setup_joueur_permissions(guild: discord.Guild):
+    role = guild.get_role(JOUEUR_ROLE_ID)
+
+    if not role:
+        print("❌ Rôle Joueur introuvable.")
+        return
+
+    for channel_id in JOUEUR_POST_CHANNEL_IDS:
+        channel = guild.get_channel(channel_id)
+
+        if not isinstance(channel, discord.TextChannel):
+            print(f"❌ Salon introuvable ou invalide : {channel_id}")
+            continue
+
+        try:
+            await channel.set_permissions(
+                role,
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+                reason="Permission automatique du rôle Joueur"
+            )
+            print(f"✅ Joueur peut poster dans #{channel.name}")
+        except discord.Forbidden:
+            print(f"❌ Permission refusée pour #{channel.name}")
+        except Exception as error:
+            print(f"❌ Erreur permissions #{channel.name} : {error}")
+
+
 class MyClient(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
@@ -158,6 +189,8 @@ async def on_ready():
     print(f"✅ Connecté en tant que {client.user}")
 
     for guild in client.guilds:
+        await setup_joueur_permissions(guild)
+
         try:
             invites = await guild.invites()
             invites_cache[guild.id] = {
@@ -183,7 +216,6 @@ async def on_member_join(member: discord.Member):
     try:
         invites_before = invites_cache.get(member.guild.id, {})
         invites_after = await member.guild.invites()
-
         new_cache = {}
 
         for invite in invites_after:
@@ -191,7 +223,7 @@ async def on_member_join(member: discord.Member):
 
             if invite.code in invites_before and invite.uses > invites_before[invite.code]:
                 inviter = invite.inviter
-                total_uses = invite.uses
+                total_uses = invite.uses or 0
 
         invites_cache[member.guild.id] = new_cache
 
@@ -215,7 +247,7 @@ async def on_member_join(member: discord.Member):
         await channel.send(
             f"👋 Bienvenue à {member.mention}\n"
             f"📩 Il a été invité par {inviter_text}\n"
-            f"👑 Il a désormais **{total_uses} invitations**\n"
+            f"👑 Il a désormais **{total_uses} invitation(s)**\n"
             f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
         )
 
@@ -426,7 +458,6 @@ async def message(
     embed.set_footer(text="Nebulix FA 💜")
 
     await interaction.channel.send(embed=embed)
-
     await interaction.followup.send("✅ Message envoyé.", ephemeral=True)
 
 
@@ -477,7 +508,11 @@ async def clear(interaction: discord.Interaction, nombre: int):
 )
 @app_commands.describe(membre="Membre à expulser", raison="Raison du kick")
 @app_commands.checks.has_permissions(kick_members=True)
-async def kick(interaction: discord.Interaction, membre: discord.Member, raison: str = "Aucune raison donnée"):
+async def kick(
+    interaction: discord.Interaction,
+    membre: discord.Member,
+    raison: str = "Aucune raison donnée"
+):
     await interaction.response.defer(ephemeral=True)
 
     if membre == interaction.user:
@@ -503,7 +538,11 @@ async def kick(interaction: discord.Interaction, membre: discord.Member, raison:
 )
 @app_commands.describe(membre="Membre à bannir", raison="Raison du ban")
 @app_commands.checks.has_permissions(ban_members=True)
-async def ban(interaction: discord.Interaction, membre: discord.Member, raison: str = "Aucune raison donnée"):
+async def ban(
+    interaction: discord.Interaction,
+    membre: discord.Member,
+    raison: str = "Aucune raison donnée"
+):
     await interaction.response.defer(ephemeral=True)
 
     if membre == interaction.user:
@@ -529,7 +568,12 @@ async def ban(interaction: discord.Interaction, membre: discord.Member, raison: 
 )
 @app_commands.describe(membre="Membre à mute", minutes="Durée en minutes", raison="Raison du mute")
 @app_commands.checks.has_permissions(moderate_members=True)
-async def mute(interaction: discord.Interaction, membre: discord.Member, minutes: int, raison: str = "Aucune raison donnée"):
+async def mute(
+    interaction: discord.Interaction,
+    membre: discord.Member,
+    minutes: int,
+    raison: str = "Aucune raison donnée"
+):
     await interaction.response.defer(ephemeral=True)
 
     if minutes < 1 or minutes > 40320:
@@ -561,7 +605,11 @@ async def mute(interaction: discord.Interaction, membre: discord.Member, minutes
 )
 @app_commands.describe(membre="Membre à unmute", raison="Raison du unmute")
 @app_commands.checks.has_permissions(moderate_members=True)
-async def unmute(interaction: discord.Interaction, membre: discord.Member, raison: str = "Aucune raison donnée"):
+async def unmute(
+    interaction: discord.Interaction,
+    membre: discord.Member,
+    raison: str = "Aucune raison donnée"
+):
     await interaction.response.defer(ephemeral=True)
 
     await membre.timeout(None, reason=raison)
