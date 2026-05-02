@@ -248,12 +248,17 @@ async def on_member_join(member: discord.Member):
     if channel:
         inviter_text = inviter.mention if inviter else "l'url de Nebulix RP"
 
-        await channel.send(
+        message = (
             f"👋 Bienvenue à {member.mention}\n"
             f"📩 Il a rejoint avec {inviter_text}\n"
-            f"👑 Il a désormais **{total_uses} invitation(s)**\n"
-            f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
         )
+
+        if used_invite_code and used_invite_code.lower() != NEBULIXRP_INVITE_CODE:
+            message += f"👑 Il a désormais **{total_uses} invitation(s)**\n"
+
+        message += f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
+
+        await channel.send(message)
 
 
 @client.event
