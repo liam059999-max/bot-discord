@@ -18,6 +18,7 @@ GUILD_ID = 1496551245186338886
 JOUEUR_ROLE_ID = 1496570449830871191
 FONDATEUR_ROLE_ID = 1496551245186338891
 WELCOME_CHANNEL_ID = 1497575977222668388
+LEAVE_CHANNEL_ID = 1500546753756139540
 GIVEAWAY_ROLE_ID = 1496551245186338891
 
 NEBULIXRP_INVITE_CODE = "nebulixrp"
@@ -263,13 +264,24 @@ async def on_member_join(member: discord.Member):
 
 @client.event
 async def on_member_remove(member: discord.Member):
-    channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
+    channel = member.guild.get_channel(LEAVE_CHANNEL_ID)
 
     if channel:
-        await channel.send(
-            f"👋 **{member}** nous a quitté\n"
-            f"⭐ Nous sommes désormais **{member.guild.member_count}** sur le discord !"
+        embed = discord.Embed(
+            title="📤 Membre parti",
+            description=f"👤 **{member}** a quitté le serveur.",
+            color=discord.Color.red()
         )
+
+        embed.add_field(
+            name="📊 Membres restants",
+            value=f"{member.guild.member_count}",
+            inline=False
+        )
+
+        embed.set_footer(text="Nebulix — Départ")
+
+        await channel.send(embed=embed)
 
 
 @client.event
